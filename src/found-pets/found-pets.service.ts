@@ -1,25 +1,33 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
 import { FoundPet } from 'src/core/db/entities/found_pets.entity';
+import { LostPet } from 'src/core/db/entities/lost_pets.entity';
+
 import { CreateFoundPetDto } from 'src/core/interfaces/found_pet.interface';
-import { LostPetsService } from '../lost-pets/lost-pets.service';
+
 import { EmailService } from 'src/email/email.service';
+import { EmailOptions } from 'src/core/interfaces/mail-options.interface';
+
 import { foundPetMatchTemplate } from './templates/found-pets.template';
 
 @Injectable()
 export class FoundPetsService {
-  private readonly logger = new Logger(FoundPetsService.name);
 
   constructor(
     @InjectRepository(FoundPet)
-    private readonly foundPetRepo: Repository<FoundPet>,
-    private readonly lostPetsService: LostPetsService,
-    private readonly mailService: EmailService,
+    private readonly foundPetRepository: Repository<FoundPet>,
+
+    @InjectRepository(LostPet)
+    private readonly lostPetRepository: Repository<LostPet>,
+
+    private readonly emailService: EmailService
   ) {}
 
-  async create(dto: CreateFoundPetDto): Promise<FoundPet> {
-    const foundPet = this.foundPetRepo.create({
+  async create(dto: CreateFoundPetDto) {
+
+    const foundPet = this.foundPetRepository.create({
       species: dto.species,
       breed: dto.breed,
       color: dto.color,
@@ -33,52 +41,56 @@ export class FoundPetsService {
       found_date: new Date(dto.found_date),
       location: {
         type: 'Point',
-        coordinates: [dto.longitude, dto.latitude],
-      } as any,
+        coordinates: [dto.longitude, dto.latitude]
+      }
     });
 
-    const saved = await this.foundPetRepo.save(foundPet);
+    await this.foundPetRepository.save(foundPet);
 
-    await this.triggerNearbySearch(saved, dto.longitude, dto.latitude);
+    const lat = dto.latitude;
+    const lon = dto.longitude;
 
-    return saved;
-  }
+    const lostPets = await this.lostPetRepository
+      .createQueryBuilder('lost')
+      .addSelect(`
+        ST_Distance(
+          lost.location::geography,
+          ST_SetSRID(ST_MakePoint(:lon, :lat),4326)::geography
+        )
+      `, 'distance')
+      .where('lost.is_active = true')
+      .andWhere(`
+        ST_DWithin(
+          lost.location::geography,
+          ST_SetSRID(ST_MakePoint(:lon,:lat),4326)::geography,
+          500
+        )
+      `, { lat, lon })
+      .orderBy('distance', 'ASC')
+      .getRawAndEntities();
 
-  private async triggerNearbySearch(
-    foundPet: FoundPet,
-    longitude: number,
-    latitude: number,
-  ): Promise<void> {
-    try {
-      const nearbyLostPets = await this.lostPetsService.findWithinRadius(
-        longitude,
-        latitude,
-        500,
+    for (let i = 0; i < lostPets.entities.length; i++) {
+
+      const lostPet = lostPets.entities[i];
+      const distance = lostPets.raw[i].distance;
+
+      const template = foundPetMatchTemplate(
+        lostPet,
+        foundPet,
+        distance
       );
 
-      this.logger.log(
-        `Encontradas ${nearbyLostPets.length} mascotas perdidas en 500m del reporte #${foundPet.id}`,
-      );
+      const options: EmailOptions = {
+        to: 'sebafiend20064@gmail.com',
+        subject: 'Posible coincidencia con tu mascota perdida',
+        html: template
+      };
 
-      for (const lostPet of nearbyLostPets) {
-
-  const html = foundPetMatchTemplate(
-    lostPet,
-    foundPet,
-    lostPet.distance,
-  );
-
-  await this.mailService.sendEmail({
-    to: lostPet.owner_email,
-    subject: '🐾 Posible coincidencia con tu mascota perdida',
-    html,
-  });
-}
-    } catch (error) {
-      this.logger.error(
-        `Error en búsqueda de mascotas cercanas al reporte #${foundPet.id}`,
-        error,
-      );
+      await this.emailService.sendEmail(options);
     }
+
+    return {
+      message: 'Mascota encontrada registrada'
+    };
   }
 }
