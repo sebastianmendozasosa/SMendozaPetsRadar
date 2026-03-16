@@ -81,7 +81,7 @@ export class FoundPetsService {
       );
 
       const options: EmailOptions = {
-        to: 'sebafiend20064@gmail.com',
+        to: 'sebafiend200604@gmail.com',
         subject: 'Posible coincidencia con tu mascota perdida',
         html: template
       };
