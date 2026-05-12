@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
 
+import { FOUND_PETS_LIST_CACHE_KEY } from 'src/core/constants/cache-keys';
 import { FoundPet } from 'src/core/db/entities/found_pets.entity';
 import { LostPet } from 'src/core/db/entities/lost_pets.entity';
 
@@ -22,8 +25,17 @@ export class FoundPetsService {
     @InjectRepository(LostPet)
     private readonly lostPetRepository: Repository<LostPet>,
 
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
   ) {}
+
+  findAll() {
+    return this.foundPetRepository.find({
+      order: { created_at: 'DESC' },
+    });
+  }
 
   async create(dto: CreateFoundPetDto) {
 
@@ -50,29 +62,23 @@ export class FoundPetsService {
     const lat = dto.latitude;
     const lon = dto.longitude;
 
+    const pointExpr = 'ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography';
+
     const lostPets = await this.lostPetRepository
       .createQueryBuilder('lost')
-      .addSelect(`
-        ST_Distance(
-          lost.location::geography,
-          ST_SetSRID(ST_MakePoint(:lon, :lat),4326)::geography
-        )
-      `, 'distance')
+      .addSelect(`ST_Distance(lost.location::geography, ${pointExpr})`, 'distance')
       .where('lost.is_active = true')
-      .andWhere(`
-        ST_DWithin(
-          lost.location::geography,
-          ST_SetSRID(ST_MakePoint(:lon,:lat),4326)::geography,
-          500
-        )
-      `, { lat, lon })
-      .orderBy('distance', 'ASC')
+      .andWhere(`ST_DWithin(lost.location::geography, ${pointExpr}, 500)`)
+      .setParameters({ lat, lon })
+      .orderBy(`ST_Distance(lost.location::geography, ${pointExpr})`, 'ASC')
       .getRawAndEntities();
 
     for (let i = 0; i < lostPets.entities.length; i++) {
 
       const lostPet = lostPets.entities[i];
-      const distance = lostPets.raw[i].distance;
+      const raw = lostPets.raw[i] as Record<string, unknown>;
+      const distanceRaw = raw.distance ?? raw.lost_distance;
+      const distance = Number(distanceRaw);
 
       const template = foundPetMatchTemplate(
         lostPet,
@@ -88,6 +94,8 @@ export class FoundPetsService {
 
       await this.emailService.sendEmail(options);
     }
+
+    await this.cacheManager.del(FOUND_PETS_LIST_CACHE_KEY);
 
     return {
       message: 'Mascota encontrada registrada'

@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { Cache } from 'cache-manager';
 import { Repository } from 'typeorm';
 
+import { LOST_PETS_LIST_CACHE_KEY } from 'src/core/constants/cache-keys';
 import { LostPet } from 'src/core/db/entities/lost_pets.entity';
 import { CreateLostPetDto } from 'src/core/interfaces/lost_pet.interface';
 
@@ -11,7 +14,17 @@ export class LostPetsService {
   constructor(
     @InjectRepository(LostPet)
     private readonly lostPetsRepository: Repository<LostPet>,
+
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
   ) {}
+
+  findAllActive() {
+    return this.lostPetsRepository.find({
+      where: { is_active: true },
+      order: { created_at: 'DESC' },
+    });
+  }
 
   async create(dto: CreateLostPetDto) {
 
@@ -35,6 +48,8 @@ export class LostPetsService {
       }
     });
 
-    return await this.lostPetsRepository.save(lostPet);
+    const saved = await this.lostPetsRepository.save(lostPet);
+    await this.cacheManager.del(LOST_PETS_LIST_CACHE_KEY);
+    return saved;
   }
 }
