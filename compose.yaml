@@ -1,25 +1,44 @@
 services:
-  postgres:
-    image: postgis/postgis:16-3.4
-    container_name: petradar-db
-    restart: always
+  pet-radar-api:
+    build:
+      context: .
+    image: pet-radar-api:latest
+    container_name: PetRadarAPI
     ports:
-      - "5432:5432"
-
+      - 3000:3000
     environment:
-      POSTGRES_USER: postgres
+      PORT: ${PORT}
+      MAILER_EMAIL: ${MAILER_EMAIL}
+      MAILER_SERVICE: ${MAILER_SERVICE}
+      MAILER_PASSWORD: ${MAILER_PASSWORD}
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN}
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APPINSIGHTS_CONNECTION_STRING: ${APPINSIGHTS_CONNECTION_STRING}
+      
+  postgres:
+    image: postgis/postgis:16-master
+    container_name: PostgresDB
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-
     volumes:
-      - postgres_data_db:/var/lib/postgresql/data
-
+      - postgres_data_db:/var/lib/postgresql
+ 
   redis:
-    image: redis:7-alpine
-    container_name: petradar-redis
-    restart: always
+    image: redis
+    container_name: PetRadarRedis
     ports:
-      - "6379:6379"
-
+      - 6379:6379
+    volumes:
+      - redis_data_db:/data
+ 
 volumes:
   postgres_data_db:
+  redis_data_db:
