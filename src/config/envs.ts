@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import * as env from 'env-var';
-import winston from 'winston';
 
 export const envs = {
   PORT: env.get('PORT').default(3000).asPortNumber(),
@@ -13,6 +12,18 @@ export const envs = {
   DB_PORT: env.get('DB_PORT').required().asPortNumber(),
   DB_HOST: env.get('DB_HOST').required().asString(),
   DB_USER: env.get('DB_USER').required().asString(),
-  APPINSIGHTS_CONNECTION_STRING: env.get('APPINSIGHTS_CONNECTION_STRING').required().asString(),
+
+  REDIS_HOST: env.get('REDIS_HOST').default('localhost').asString(),
+  REDIS_PORT: env.get('REDIS_PORT').default(6379).asPortNumber(),
+  REDIS_PASSWORD: env.get('REDIS_PASSWORD').default('').asString(),
+
+  // CacheModule espera TTL en milisegundos en este proyecto
+  CACHE_TTL_MS: env.get('CACHE_TTL_MS').default(30_000).asIntPositive(),
+
+  // Opcional en local. Si está vacío, no se inicializa Application Insights.
+  APPINSIGHTS_CONNECTION_STRING: env
+    .get('APPINSIGHTS_CONNECTION_STRING')
+    .default('')
+    .asString(),
 };
 

@@ -12,6 +12,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Copiar el codigo a la VM
         uses: actions/checkout@v6
@@ -32,6 +35,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
+          context: ./pet-radar-api
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

@@ -6,17 +6,24 @@ services:
     container_name: PetRadarAPI
     ports:
       - 3000:3000
+    depends_on:
+      - postgres
+      - redis
     environment:
       PORT: ${PORT}
       MAILER_EMAIL: ${MAILER_EMAIL}
       MAILER_SERVICE: ${MAILER_SERVICE}
       MAILER_PASSWORD: ${MAILER_PASSWORD}
       MAPBOX_TOKEN: ${MAPBOX_TOKEN}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       DB_NAME: ${DB_NAME}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CACHE_TTL_MS: ${CACHE_TTL_MS}
       APPINSIGHTS_CONNECTION_STRING: ${APPINSIGHTS_CONNECTION_STRING}
       
   postgres:
@@ -29,7 +36,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
-      - postgres_data_db:/var/lib/postgresql
+      - postgres_data_db:/var/lib/postgresql/data
  
   redis:
     image: redis
