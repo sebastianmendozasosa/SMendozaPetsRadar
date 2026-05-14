@@ -1,7 +1,7 @@
 services:
   pet-radar-api:
     build:
-      context: .
+      context: ./pet-radar-api
     image: pet-radar-api:latest
     container_name: PetRadarAPI
     ports:
